@@ -9,11 +9,11 @@ RUN apt-get update && \
     apt-get install -y --no-install-recommends build-essential git gcc g++ libpq-dev && \
     rm -rf /var/lib/apt/lists/*
 
-COPY server/requirements.txt /app/requirements.txt
+COPY requirements.txt /app/requirements.txt
 RUN pip install --upgrade pip
 RUN pip install -r /app/requirements.txt
 
-COPY server/ /app/
+COPY . /app/
 
-# Default command — adjust module/path if different
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8080"]
+EXPOSE 8000
+CMD ["sh", "-c", "uvicorn main:app --host 0.0.0.0 --port ${PORT:-8000}"]
