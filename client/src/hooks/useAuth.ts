@@ -10,6 +10,11 @@ export function useAuth() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    if (!auth) {
+      setLoading(false);
+      return;
+    }
+
     const unsubscribe = onAuthStateChanged(auth, (user) => {
       if (user) {
         Cookies.set("codelens_user", "true", { expires: 7 });
@@ -23,6 +28,10 @@ export function useAuth() {
   }, []);
 
   const loginWithGoogle = async () => {
+    if (!auth) {
+      throw new Error("Firebase is not configured.");
+    }
+
     const provider = new GoogleAuthProvider();
     try {
       const result = await signInWithPopup(auth, provider);
@@ -35,6 +44,10 @@ export function useAuth() {
   };
 
   const logout = async () => {
+    if (!auth) {
+      return;
+    }
+
     try {
       await signOut(auth);
       Cookies.remove("codelens_user");
