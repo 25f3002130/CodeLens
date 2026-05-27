@@ -2,10 +2,13 @@ import os
 import git
 import shutil
 import hashlib
+import tempfile
 from urllib.parse import urlparse
 
 class IngestionEngine:
-    def __init__(self, base_dir: str = "./repo"):
+    def __init__(self, base_dir: str = None):
+        if base_dir is None:
+            base_dir = os.path.join(tempfile.gettempdir(), "codelens_repos")
         self.base_dir = base_dir
         os.makedirs(self.base_dir, exist_ok=True)
 
@@ -26,15 +29,9 @@ class IngestionEngine:
 
     def clone_repo(self, repo_url: str) -> str:
         self._validate_repo_url(repo_url)
-        target_path = self._get_repo_path(repo_url)
-
-        if os.path.exists(target_path):
-            print(f"Repo already exists at {target_path}, pulling latest...")
-            repo = git.Repo(target_path)
-            repo.remotes.origin.pull()
-        else:
-            print(f"Cloning {repo_url} to {target_path}...")
-            git.Repo.clone_from(repo_url, target_path, depth=1)
+        target_path = tempfile.mkdtemp(prefix=f"{hashlib.sha256(repo_url.encode()).hexdigest()[:12]}_", dir=self.base_dir)
+        print(f"Cloning {repo_url} to temporary directory {target_path}...")
+        git.Repo.clone_from(repo_url, target_path, depth=1)
 
         return target_path
 
