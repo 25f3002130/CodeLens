@@ -235,12 +235,11 @@ export default function AIChat({ repoId, user, className }: { repoId: string, us
                             : "bg-[#111]/80 backdrop-blur-sm text-[#ddd] border border-[#222] rounded-tl-sm shadow-xl"
                         }`}>
                             {msg.role === "assistant" ? (
-                                <ReactMarkdown 
-                                    className="prose prose-invert prose-sm max-w-none prose-p:leading-relaxed prose-pre:bg-[#050505] prose-pre:border prose-pre:border-[#333] prose-pre:p-3 prose-code:text-[#00ff41] prose-a:text-[#00ff41]"
-                                    remarkPlugins={[remarkGfm]}
-                                >
-                                    {msg.content}
-                                </ReactMarkdown>
+                                <div className="prose prose-invert prose-sm max-w-none prose-p:leading-relaxed prose-pre:bg-[#050505] prose-pre:border prose-pre:border-[#333] prose-pre:p-3 prose-code:text-[#00ff41] prose-a:text-[#00ff41]">
+                                    <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                                        {msg.content}
+                                    </ReactMarkdown>
+                                </div>
                             ) : (
                                 msg.content
                             )}
