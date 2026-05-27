@@ -112,7 +112,7 @@ const Textarea = React.forwardRef<HTMLTextAreaElement, TextareaProps>(
 )
 Textarea.displayName = "Textarea"
 
-export default function AIChat({ repoId, user }: { repoId: string, user: FirebaseUser }) {
+export default function AIChat({ repoId, user, className }: { repoId: string, user: FirebaseUser, className?: string }) {
     const [messages, setMessages] = useState<Message[]>([]);
     const [value, setValue] = useState("");
     const [isTyping, setIsTyping] = useState(false);
@@ -188,7 +188,7 @@ export default function AIChat({ repoId, user }: { repoId: string, user: Firebas
     };
 
     return (
-        <div id="chat-container" className="panel h-full flex flex-col bg-[#050505] border-[#222] relative overflow-hidden">
+        <div id="chat-container" className={`panel h-full flex flex-col bg-[#050505] border-[#222] relative overflow-hidden ${className ?? ""}`}>
             <div className="absolute inset-0 w-full h-full overflow-hidden pointer-events-none">
                 <div className="absolute top-0 left-1/4 w-64 h-64 bg-[#00ff41]/5 rounded-full mix-blend-normal filter blur-[100px] animate-pulse" />
                 <div className="absolute bottom-0 right-1/4 w-64 h-64 bg-[#00ff41]/5 rounded-full mix-blend-normal filter blur-[100px] animate-pulse delay-700" />
