@@ -105,7 +105,6 @@ export default function GraphView({ data }: { data: any }) {
           // Central links could be a different style, but for now keep consistent
           return "#00ff41";
         }}
-        linkLineWidth={2.5}
         linkWidth={({ source, target }: any) => {
           // Make links to/from central node slightly wider
           const sourceIsCentral = source.id === "central-user-view" || source.isCentral;
