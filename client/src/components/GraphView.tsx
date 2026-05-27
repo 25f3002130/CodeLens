@@ -17,13 +17,13 @@ export default function GraphView({ data }: { data: any }) {
   // Extract unique languages from the data for dynamic legend
   const uniqueLanguages = useMemo(() => {
     if (!data || !data.nodes) return [];
-    const languages = new Set();
+    const languages = new Set<string>();
     data.nodes.forEach((node: any) => {
       if (!node.isCentral) {
-        languages.add(node.language);
+        languages.add(String(node.language || ""));
       }
     });
-    return Array.from(languages).sort();
+    return Array.from(languages).filter(Boolean).sort();
   }, [data]);
 
   // Enhance graph data with central "User sees this" node and connections
