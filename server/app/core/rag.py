@@ -7,21 +7,32 @@ class RAGEngine:
         self.persist_directory = persist_directory
         self.client = None
         self.collection = None
+        self.disabled = False
+        self.disabled_reason = ""
 
     def _ensure_collection(self):
+        if self.disabled:
+            raise RuntimeError(self.disabled_reason or "RAG is disabled")
+
         if self.collection is not None:
             return self.collection
 
-        client = chromadb.PersistentClient(path=self.persist_directory)
-        embedding_fn = embedding_functions.SentenceTransformerEmbeddingFunction(
-            model_name="all-MiniLM-L6-v2"
-        )
-        self.client = client
-        self.collection = client.get_or_create_collection(
-            name="codelens_chunks",
-            embedding_function=embedding_fn,
-        )
-        return self.collection
+        try:
+            client = chromadb.PersistentClient(path=self.persist_directory)
+            embedding_fn = embedding_functions.SentenceTransformerEmbeddingFunction(
+                model_name="all-MiniLM-L6-v2"
+            )
+            self.client = client
+            self.collection = client.get_or_create_collection(
+                name="codelens_chunks",
+                embedding_function=embedding_fn,
+            )
+            return self.collection
+        except Exception as e:
+            self.disabled = True
+            self.disabled_reason = f"RAG initialization failed: {e}"
+            print(f"Warning: {self.disabled_reason}")
+            raise
 
     def index_repo(self, repo_id: str, files: List[Dict[str, Any]]):
         """
@@ -48,12 +59,19 @@ class RAGEngine:
                 })
                 ids.append(f"{repo_id}_{file['file_path']}_{i}")
 
-        if documents:
+        if not documents or self.disabled:
+            return
+
+        try:
             self._ensure_collection().upsert(
                 documents=documents,
                 metadatas=metadatas,
                 ids=ids,
             )
+        except Exception as e:
+            self.disabled = True
+            self.disabled_reason = f"RAG indexing failed: {e}"
+            print(f"Warning: {self.disabled_reason}")
 
     def _chunk_code(self, content: str, chunk_size: int) -> List[str]:
         lines = content.split("\n")
@@ -76,8 +94,17 @@ class RAGEngine:
         return chunks
 
     def query(self, repo_id: str, query_text: str, n_results: int = 5) -> Dict[str, Any]:
-        return self._ensure_collection().query(
-            query_texts=[query_text],
-            n_results=n_results,
-            where={"repo_id": repo_id},
-        )
+        if self.disabled:
+            return {"documents": [[]], "metadatas": [[]], "ids": [[]]}
+
+        try:
+            return self._ensure_collection().query(
+                query_texts=[query_text],
+                n_results=n_results,
+                where={"repo_id": repo_id},
+            )
+        except Exception as e:
+            self.disabled = True
+            self.disabled_reason = f"RAG query failed: {e}"
+            print(f"Warning: {self.disabled_reason}")
+            return {"documents": [[]], "metadatas": [[]], "ids": [[]]}

@@ -71,8 +71,11 @@ class CodeAnalyzer:
             graph_gen = GraphBuilder(repo_path, all_files)
             graph_data = graph_gen.build_graph()
 
-            # Index for RAG
-            self.rag.index_repo(repo_id, all_files)
+            # Index for RAG (best-effort on constrained hosts)
+            try:
+                self.rag.index_repo(repo_id, all_files)
+            except Exception as e:
+                print(f"Warning: skipping RAG indexing due to error: {e}")
 
             # Remove content from response to keep it light
             for f in all_files:
