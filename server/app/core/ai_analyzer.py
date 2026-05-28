@@ -133,14 +133,24 @@ class AIAnalyzer:
             language = file.get("language", "")
             functions = file.get("functions", [])
             complexity = file.get("complexity", 0)
+            content = str(file.get("content", ""))
+            content_preview = "\n".join(content.splitlines()[:20])
 
-            if complexity > 5:  # Only include complex files
-                summary_parts.append(f"""
+            function_names = []
+            for fn in functions[:5]:
+                if isinstance(fn, dict):
+                    function_names.append(fn.get("name", "unknown"))
+                else:
+                    function_names.append(str(fn))
+
+            summary_parts.append(f"""
 File: {file_path} ({language})
 Complexity: {complexity}
-Functions: {', '.join([f.get('name', 'unknown') for f in functions[:5]])}
+Functions: {', '.join(function_names) if function_names else 'N/A'}
+Snippet:
+{content_preview[:1200]}
 """)
-                file_count += 1
+            file_count += 1
 
         return "\n".join(summary_parts) if summary_parts else "Complex codebase analysis"
 
