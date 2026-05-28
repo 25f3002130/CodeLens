@@ -239,6 +239,20 @@ export default function ResultsPage() {
               tone="warning"
             />
           )}
+
+          {/* Files tree inside left sidebar */}
+          <div>
+            <h2 className="text-xs font-bold text-[#666] uppercase tracking-widest px-3 mt-2 mb-4">Files</h2>
+            <div className="bg-[#0a0a0a] border border-[#222] rounded-xl p-3 max-h-[520px] overflow-auto">
+              {files.length > 0 ? (
+                <div className="text-[13px] text-[#e5e5e5]">
+                  <FileTree files={files} />
+                </div>
+              ) : (
+                <p className="text-[11px] text-[#555] text-center py-6">No files available</p>
+              )}
+            </div>
+          </div>
         </div>
 
         {/* Center - Graph & Chat */}
@@ -468,4 +482,120 @@ function SeverityBadge({ severity }: { severity: string }) {
     LOW: "bg-blue-500/15 text-blue-300 border-blue-500/30",
   };
   return <span className={`text-[8px] border px-1.5 py-0.5 rounded font-bold ${classes[severity] || "bg-[#111] text-[#777] border-[#222]"}`}>{severity}</span>;
+}
+
+// --- File tree builder & renderer ---
+type TreeNode = {
+  name: string;
+  path?: string;
+  children?: TreeNode[];
+  language?: string;
+  vulnerabilities?: any[];
+  isFile?: boolean;
+};
+
+function buildFileTree(files: AnalyzedFile[]): TreeNode[] {
+  const rootMap: Map<string, any> = new Map();
+
+  for (const f of files) {
+    const parts = f.file_path.split("/");
+    let cur = rootMap;
+    for (let i = 0; i < parts.length; i++) {
+      const part = parts[i];
+      const isLast = i === parts.length - 1;
+      if (!cur.has(part)) {
+        cur.set(part, { _meta: { name: part, children: new Map(), isFile: false } });
+      }
+      const entry = cur.get(part);
+      if (isLast) {
+        // mark as file
+        entry._meta.isFile = true;
+        entry._meta.path = f.file_path;
+        entry._meta.language = f.language;
+        entry._meta.vulnerabilities = f.vulnerabilities || [];
+      }
+      cur = entry._meta.children;
+    }
+  }
+
+  function mapMapToArray(map: Map<string, any>): TreeNode[] {
+    const arr: TreeNode[] = [];
+    for (const [key, value] of map.entries()) {
+      const meta = value._meta;
+      const node: TreeNode = {
+        name: meta.name,
+        path: meta.path,
+        language: meta.language,
+        vulnerabilities: meta.vulnerabilities,
+        isFile: meta.isFile,
+      };
+      const childrenArr = mapMapToArray(meta.children);
+      if (childrenArr.length) node.children = childrenArr.sort((a, b) => (a.isFile === b.isFile ? a.name.localeCompare(b.name) : a.isFile ? 1 : -1));
+      arr.push(node);
+    }
+    // sort folders first then files
+    return arr.sort((a, b) => {
+      if ((a.isFile ? 1 : 0) !== (b.isFile ? 1 : 0)) return a.isFile ? 1 : -1;
+      return a.name.localeCompare(b.name);
+    });
+  }
+
+  return mapMapToArray(rootMap);
+}
+
+function langColor(language?: string, hasVulns?: boolean) {
+  if (hasVulns) return "#ef4444";
+  switch ((language || "").toLowerCase()) {
+    case "python": return "#3776ab";
+    case "javascript": return "#f7df1e";
+    case "typescript": return "#3178c6";
+    case "framework": return "#a855f7";
+    case "database": return "#eab308";
+    case "package": return "#3b82f6";
+    default: return "#00ff41";
+  }
+}
+
+function FileTree({ files }: { files: AnalyzedFile[] }) {
+  const tree = buildFileTree(files);
+
+  return (
+    <div className="space-y-1 text-sm">
+      {tree.map((node) => (
+        <TreeNodeView key={node.name + (node.path || "")} node={node} depth={0} />
+      ))}
+    </div>
+  );
+}
+
+function TreeNodeView({ node, depth }: { node: TreeNode; depth: number }) {
+  const [open, setOpen] = useState(true);
+  const hasChildren = node.children && node.children.length > 0;
+  const isFile = !!node.isFile;
+  const vulnCount = (node.vulnerabilities || []).length;
+  const color = langColor(node.language, vulnCount > 0);
+
+  return (
+    <div>
+      <div className="flex items-center gap-2 cursor-default" style={{ paddingLeft: depth * 12 }}>
+        {hasChildren ? (
+          <button onClick={() => setOpen(!open)} className="text-[11px] text-[#888] w-4 h-4 flex items-center justify-center">{open ? '▾' : '▸'}</button>
+        ) : <div style={{ width: 16 }} />}
+
+        <div className="w-2 h-2 rounded-full" style={{ backgroundColor: color }} />
+
+        <div className={`truncate ${isFile ? 'text-[13px]' : 'text-[12px] text-[#cfcfcf] font-medium'}`}>
+          {node.name}{isFile && node.path ? <span className="text-[11px] text-[#666] font-mono ml-2">{node.path.split('/').pop()}</span> : null}
+        </div>
+        {isFile && vulnCount > 0 && <span className="ml-auto text-[11px] text-red-400 font-bold">{vulnCount}</span>}
+      </div>
+      {hasChildren && open && (
+        <div className="mt-1">
+          {node.children!.map((c) => (
+            <TreeNodeView key={(c.path || c.name)} node={c} depth={depth + 1} />
+          ))}
+        </div>
+      )}
+    </div>
+  );
 }
