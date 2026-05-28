@@ -168,4 +168,19 @@ class CodeAnalyzer:
                 seen.add(key)
                 unique.append(vuln)
         severity_order = {"CRITICAL": 0, "HIGH": 1, "MEDIUM": 2, "LOW": 3}
-        return sorted(unique, key=lambda item: (severity_order.get(str(item.get("severity", "LOW")), 9), str(item.get("file_path", "")), int(item.get("line", 0))))
+
+        def safe_int(val, default=0):
+            try:
+                return int(val)
+            except Exception:
+                try:
+                    s = str(val)
+                    import re
+                    m = re.search(r"(\d+)", s)
+                    if m:
+                        return int(m.group(1))
+                except Exception:
+                    pass
+            return default
+
+        return sorted(unique, key=lambda item: (severity_order.get(str(item.get("severity", "LOW")), 9), str(item.get("file_path", "")), safe_int(item.get("line", 0))))

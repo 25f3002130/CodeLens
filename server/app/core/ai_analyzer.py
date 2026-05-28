@@ -45,6 +45,21 @@ class AIAnalyzer:
             return match.group(1).strip()
         return text
 
+    def _safe_int(self, value, default=0):
+        """Try to coerce a value to int, with safe fallbacks."""
+        try:
+            return int(value)
+        except Exception:
+            # Try to extract first integer from string
+            try:
+                s = str(value)
+                m = re.search(r"(\d+)", s)
+                if m:
+                    return int(m.group(1))
+            except Exception:
+                pass
+        return default
+
     def _safe_parse_json(self, text: str) -> Any:
         """Parse JSON from LLM response, handling markdown wrappers and common issues."""
         cleaned = self._strip_markdown_codeblocks(text)
@@ -197,7 +212,7 @@ Return ONLY valid JSON matching the structure specified in the prompt guidelines
                         "severity": str(f.get("severity", "MEDIUM")),
                         "description": str(f.get("description", "")),
                         "file_path": str(f.get("file_path", f.get("location", ""))),
-                        "line": int(f.get("line", 0)),
+                        "line": self._safe_int(f.get("line", 0)),
                         "snippet": str(f.get("snippet", ""))
                     })
             return clean_findings
@@ -216,10 +231,8 @@ Return ONLY valid JSON matching the structure specified in the prompt guidelines
                             file_path = location.split(":")[0] if ":" in location else location
                             line = 0
                             if ":" in location:
-                                try:
-                                    line = int(location.split(":")[-1])
-                                except ValueError:
-                                    line = 0
+                                line_candidate = location.split(":")[-1]
+                                line = self._safe_int(line_candidate, 0)
                             vulnerabilities.append({
                                 "name": str(f.get("name", f.get("type", "Unknown Issue"))),
                                 "severity": str(f.get("severity", "MEDIUM")),
@@ -269,7 +282,7 @@ Return ONLY valid JSON matching the structure specified in the prompt guidelines
             if isinstance(item, dict):
                 formatted.append({
                     "file_path": str(item.get("file_path", "")),
-                    "complexity": int(item.get("complexity", item.get("complexity_score", 0))),
+                    "complexity": self._safe_int(item.get("complexity", item.get("complexity_score", 0))),
                     "language": item.get("language", "unknown"),
                     "functions": [],
                     "classes": [],

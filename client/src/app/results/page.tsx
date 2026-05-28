@@ -64,36 +64,73 @@ export default function ResultsPage() {
   }, [router]);
 
   const allDependencies = useMemo(() => {
-    if (!results?.dependency_manifests) return [];
-
-    // Map AI findings by name for quick lookup
+    // Build dependencies list from both dependency_manifests and ai_dependencies if available
     const vulnerableMap = new Map();
     const outdatedMap = new Map();
+    const deps = new Map<string, any>();
 
-    if (results.ai_dependencies) {
+    if (results?.ai_dependencies) {
       results.ai_dependencies.vulnerable?.forEach((d: any) => {
+        if (!d || !d.name) return;
         vulnerableMap.set(d.name, d);
+        if (!deps.has(d.name)) {
+          deps.set(d.name, {
+            name: d.name,
+            version: d.version || d.current || "",
+            isVulnerable: true,
+            isOutdated: false,
+            vulnerabilityInfo: d,
+            outdatedInfo: null,
+          });
+        } else {
+          const e = deps.get(d.name);
+          e.isVulnerable = true;
+          e.vulnerabilityInfo = d;
+        }
       });
+
       results.ai_dependencies.outdated?.forEach((d: any) => {
+        if (!d || !d.name) return;
         outdatedMap.set(d.name, d);
+        if (!deps.has(d.name)) {
+          deps.set(d.name, {
+            name: d.name,
+            version: d.current || d.version || "",
+            isVulnerable: false,
+            isOutdated: true,
+            vulnerabilityInfo: null,
+            outdatedInfo: d,
+          });
+        } else {
+          const e = deps.get(d.name);
+          e.isOutdated = true;
+          e.outdatedInfo = d;
+        }
       });
     }
 
-    const deps = new Map();
-    results.dependency_manifests.forEach((manifest: any) => {
-      manifest.dependencies?.forEach((dep: any) => {
-        if (!deps.has(dep.name)) {
-          deps.set(dep.name, {
-            name: dep.name,
-            version: dep.version,
-            isVulnerable: vulnerableMap.has(dep.name),
-            isOutdated: outdatedMap.has(dep.name),
-            vulnerabilityInfo: vulnerableMap.get(dep.name),
-            outdatedInfo: outdatedMap.get(dep.name)
-          });
-        }
+    if (results?.dependency_manifests) {
+      results.dependency_manifests.forEach((manifest: any) => {
+        manifest.dependencies?.forEach((dep: any) => {
+          if (!dep || !dep.name) return;
+          if (!deps.has(dep.name)) {
+            deps.set(dep.name, {
+              name: dep.name,
+              version: dep.version || "",
+              isVulnerable: vulnerableMap.has(dep.name),
+              isOutdated: outdatedMap.has(dep.name),
+              vulnerabilityInfo: vulnerableMap.get(dep.name),
+              outdatedInfo: outdatedMap.get(dep.name),
+            });
+          } else {
+            const e = deps.get(dep.name);
+            e.version = e.version || dep.version || "";
+          }
+        });
       });
-    });
+    }
+
+    if (deps.size === 0) return [];
 
     // Convert to array and sort (vulnerable first, then outdated, then alphabetical)
     return Array.from(deps.values()).sort((a, b) => {
