@@ -7,6 +7,11 @@ from .ai_analyzer import AIAnalyzer
 from .graph import GraphBuilder
 import hashlib
 
+try:
+    import tomllib
+except Exception:
+    tomllib = None
+
 class CodeAnalyzer:
     SKIP_DIRS = {".git", "node_modules", "__pycache__", ".next", "dist", "build", "coverage", "venv", ".venv"}
     MAX_FILES = 250
@@ -86,6 +91,8 @@ class CodeAnalyzer:
             ai_tech_stack = {}
             ai_deps_data = {}
             repo_context_files = self._collect_repo_context_files(all_files)
+            dependency_manifests = self._collect_dependency_manifests(all_files)
+            dependency_count = sum(len(manifest.get("dependencies", [])) for manifest in dependency_manifests)
 
             # Use AI Analysis to enhance findings if available
             if self.ai_analyzer:
@@ -128,9 +135,6 @@ class CodeAnalyzer:
             for f in all_files:
                 if "content" in f:
                     del f["content"]
-
-            dependency_manifests = []
-            dependency_count = 0
 
             snapshot = {
                 "repo_id": repo_id,
@@ -229,6 +233,120 @@ class CodeAnalyzer:
             })
 
         return context_files
+
+    def _collect_dependency_manifests(self, files: List[Dict]) -> List[Dict[str, Any]]:
+        manifests = []
+
+        for file in files:
+            file_path = str(file.get("file_path", ""))
+            basename = os.path.basename(file_path).lower()
+            content = str(file.get("content", ""))
+
+            if basename == "package.json":
+                manifest = self._parse_package_json(file_path, content)
+            elif basename in {"requirements.txt", "requirements-dev.txt", "dev-requirements.txt"}:
+                manifest = self._parse_requirements_file(file_path, content)
+            elif basename == "pyproject.toml":
+                manifest = self._parse_pyproject_toml(file_path, content)
+            else:
+                manifest = {}
+
+            if manifest:
+                manifests.append(manifest)
+
+        return manifests
+
+    def _parse_package_json(self, file_path: str, content: str) -> Dict[str, Any]:
+        try:
+            parsed = json.loads(content)
+        except Exception:
+            return {}
+
+        dependencies = []
+        for section in ("dependencies", "devDependencies", "peerDependencies", "optionalDependencies"):
+            values = parsed.get(section, {})
+            if not isinstance(values, dict):
+                continue
+            for name, version in values.items():
+                dependencies.append({"name": str(name), "version": str(version), "source": section})
+
+        if not dependencies:
+            return {}
+
+        return {"file_path": file_path, "type": "package.json", "dependencies": dependencies}
+
+    def _parse_requirements_file(self, file_path: str, content: str) -> Dict[str, Any]:
+        dependencies = []
+        for line in content.splitlines():
+            raw = line.strip()
+            if not raw or raw.startswith("#") or raw.startswith("-"):
+                continue
+
+            raw = raw.split("#", 1)[0].strip()
+            match = re.match(r"^([A-Za-z0-9_.-]+)\s*([<>=!~].*)?$", raw)
+            if not match:
+                continue
+
+            name = match.group(1)
+            version = (match.group(2) or "").strip()
+            dependencies.append({"name": name, "version": version, "source": "requirements.txt"})
+
+        if not dependencies:
+            return {}
+
+        return {"file_path": file_path, "type": "requirements.txt", "dependencies": dependencies}
+
+    def _parse_pyproject_toml(self, file_path: str, content: str) -> Dict[str, Any]:
+        if tomllib is None:
+            return {}
+
+        try:
+            parsed = tomllib.loads(content)
+        except Exception:
+            return {}
+
+        dependencies = []
+
+        project_deps = parsed.get("project", {}).get("dependencies", [])
+        if isinstance(project_deps, list):
+            for item in project_deps:
+                if not isinstance(item, str):
+                    continue
+                name, version = self._split_dependency_string(item)
+                if name:
+                    dependencies.append({"name": name, "version": version, "source": "pyproject.toml"})
+
+        poetry_deps = parsed.get("tool", {}).get("poetry", {}).get("dependencies", {})
+        if isinstance(poetry_deps, dict):
+            for name, version in poetry_deps.items():
+                if str(name).lower() == "python":
+                    continue
+                dependencies.append({"name": str(name), "version": self._stringify_dependency_version(version), "source": "pyproject.toml"})
+
+        if not dependencies:
+            return {}
+
+        return {"file_path": file_path, "type": "pyproject.toml", "dependencies": dependencies}
+
+    def _split_dependency_string(self, value: str) -> tuple[str, str]:
+        match = re.match(r"^([A-Za-z0-9_.-]+)\s*(.*)$", value.strip())
+        if not match:
+            return "", ""
+        return match.group(1), match.group(2).strip()
+
+    def _stringify_dependency_version(self, value: Any) -> str:
+        if isinstance(value, dict):
+            if value.get("version"):
+                return str(value.get("version"))
+            extras = []
+            if value.get("python"):
+                extras.append(f"python {value.get('python')}")
+            if value.get("markers"):
+                extras.append(str(value.get("markers")))
+            return ", ".join(extras)
+        if isinstance(value, list):
+            return ", ".join(str(item) for item in value)
+        return str(value)
 
     def _normalize_dependency_payload(self, dependencies: Any) -> Dict[str, List[Dict]]:
         """Normalize loose dependency payloads into the shape expected by the frontend."""

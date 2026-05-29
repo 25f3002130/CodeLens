@@ -71,10 +71,14 @@ export default function GraphView({ data, onNodeClick }: { data: any; onNodeClic
         1500  // smooth transition duration
       );
 
-      fgRef.current.d3Force?.("charge")?.strength(-320);
+      fgRef.current.d3Force?.("charge")?.strength(-1200);
+      fgRef.current.d3Force?.("collision")?.radius((node: any) => {
+        if (node.isCentral) return 24;
+        return Math.max(10, Math.min(20, 8 + String(node.name || "").length * 0.3));
+      });
       fgRef.current.d3Force?.("link")?.distance((link: any) => {
         const sourceIsCentral = link.source?.isCentral || link.target?.isCentral;
-        return sourceIsCentral ? 50 : 18;
+        return sourceIsCentral ? 140 : 95;
       });
     }
   }, [mounted, enhancedGraphData]);
@@ -169,9 +173,9 @@ export default function GraphView({ data, onNodeClick }: { data: any; onNodeClic
 }
 
 function createNodeCard(node: any) {
-  const width = node.isCentral ? 42 : Math.max(18, Math.min(32, 14 + String(node.name || "").length * 0.35));
-  const height = node.isCentral ? 18 : Math.max(12, Math.min(18, 10 + Math.max(0, String(node.path || "").split("/").length - 1) * 1.2));
-  const depth = node.isCentral ? 8 : 5;
+  const width = node.isCentral ? 28 : Math.max(12, Math.min(18, 10 + String(node.name || "").length * 0.16));
+  const height = node.isCentral ? 12 : Math.max(8, Math.min(12, 8 + Math.max(0, String(node.path || "").split("/").length - 1) * 0.4));
+  const depth = node.isCentral ? 3 : 2.5;
 
   const canvas = document.createElement("canvas");
   canvas.width = 1024;
@@ -180,54 +184,54 @@ function createNodeCard(node: any) {
   if (!context) return new THREE.Group();
 
   const isFinding = Number(node.vulnerabilities || 0) > 0;
-  const bg = isFinding ? "rgba(58, 12, 18, 0.95)" : node.isCentral ? "rgba(0, 59, 17, 0.95)" : "rgba(12, 18, 30, 0.95)";
-  const border = isFinding ? "rgba(239, 68, 68, 0.9)" : node.isCentral ? "rgba(0, 255, 65, 0.9)" : "rgba(75, 146, 255, 0.45)";
-
-  const gradient = context.createLinearGradient(0, 0, canvas.width, canvas.height);
-  gradient.addColorStop(0, bg);
-  gradient.addColorStop(1, isFinding ? "rgba(86, 18, 28, 0.95)" : "rgba(10, 10, 10, 0.95)");
+  const border = isFinding ? "rgba(239, 68, 68, 0.95)" : node.isCentral ? "rgba(0, 255, 65, 0.9)" : "rgba(75, 146, 255, 0.8)";
 
   roundRect(context, 22, 24, canvas.width - 44, canvas.height - 48, 42);
-  context.fillStyle = gradient;
+  context.fillStyle = "rgba(0, 0, 0, 0)";
   context.fill();
   context.lineWidth = 10;
   context.strokeStyle = border;
   context.stroke();
 
   context.fillStyle = isFinding ? "#fecaca" : "#e5e7eb";
-  context.font = "bold 54px Inter, sans-serif";
+  context.font = "bold 42px Inter, sans-serif";
   context.textBaseline = "top";
-  wrapText(context, String(node.name || "Untitled"), 64, 72, canvas.width - 128, 58, 2);
+  wrapText(context, String(node.name || "Untitled"), 64, 72, canvas.width - 128, 50, 2);
 
   context.fillStyle = isFinding ? "#fca5a5" : "#9ca3af";
-  context.font = "34px Inter, sans-serif";
+  context.font = "28px Inter, sans-serif";
   const pathText = String(node.path || node.id || "");
-  wrapText(context, pathText, 64, 214, canvas.width - 128, 42, 3);
+  wrapText(context, pathText, 64, 180, canvas.width - 128, 34, 2);
 
   if (isFinding) {
     context.fillStyle = "#fecaca";
-    context.font = "bold 32px Inter, sans-serif";
-    context.fillText(`Security findings: ${Number(node.vulnerabilities || 0)}`, 64, 404);
+    context.font = "bold 28px Inter, sans-serif";
+    context.fillText(`Findings: ${Number(node.vulnerabilities || 0)}`, 64, 316);
   } else {
     context.fillStyle = "#86efac";
-    context.font = "bold 28px Inter, sans-serif";
-    context.fillText(String(node.language || "file").toUpperCase(), 64, 404);
+    context.font = "bold 24px Inter, sans-serif";
+    context.fillText(String(node.language || "file").toUpperCase(), 64, 316);
   }
 
   const texture = new THREE.CanvasTexture(canvas);
   texture.colorSpace = THREE.SRGBColorSpace;
   texture.needsUpdate = true;
 
-  const material = new THREE.MeshBasicMaterial({ map: texture, transparent: true });
+  const material = new THREE.MeshBasicMaterial({
+    map: texture,
+    transparent: true,
+    opacity: 0,
+    depthWrite: false,
+  });
   const geometry = new THREE.BoxGeometry(width, height, depth);
   const mesh = new THREE.Mesh(geometry, material);
 
-  const borderMaterial = new THREE.MeshBasicMaterial({ color: border, transparent: true, opacity: 0.25 });
-  const borderMesh = new THREE.Mesh(new THREE.BoxGeometry(width + 0.8, height + 0.8, depth + 0.8), borderMaterial);
+  const borderMaterial = new THREE.LineBasicMaterial({ color: border, transparent: true, opacity: 0.95 });
+  const borderMesh = new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.BoxGeometry(width + 0.8, height + 0.8, depth + 0.8)), borderMaterial);
 
   const group = new THREE.Group();
-  group.add(borderMesh);
   group.add(mesh);
+  group.add(borderMesh);
   return group;
 }
 
