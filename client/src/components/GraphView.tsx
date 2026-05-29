@@ -74,11 +74,11 @@ export default function GraphView({ data, onNodeClick }: { data: any; onNodeClic
       fgRef.current.d3Force?.("charge")?.strength(-1200);
       fgRef.current.d3Force?.("collision")?.radius((node: any) => {
         if (node.isCentral) return 24;
-        return Math.max(10, Math.min(20, 8 + String(node.name || "").length * 0.3));
+        return Math.max(12, Math.min(22, 10 + String(node.name || "").length * 0.25));
       });
       fgRef.current.d3Force?.("link")?.distance((link: any) => {
         const sourceIsCentral = link.source?.isCentral || link.target?.isCentral;
-        return sourceIsCentral ? 140 : 95;
+        return sourceIsCentral ? 180 : 120;
       });
     }
   }, [mounted, enhancedGraphData]);
@@ -173,9 +173,9 @@ export default function GraphView({ data, onNodeClick }: { data: any; onNodeClic
 }
 
 function createNodeCard(node: any) {
-  const width = node.isCentral ? 28 : Math.max(12, Math.min(18, 10 + String(node.name || "").length * 0.16));
-  const height = node.isCentral ? 12 : Math.max(8, Math.min(12, 8 + Math.max(0, String(node.path || "").split("/").length - 1) * 0.4));
-  const depth = node.isCentral ? 3 : 2.5;
+  const width = node.isCentral ? 42 : Math.max(28, Math.min(42, 24 + String(node.name || "").length * 0.6));
+  const height = node.isCentral ? 16 : Math.max(16, Math.min(24, 14 + Math.max(0, String(node.path || "").split("/").length - 1) * 1.2));
+  const depth = node.isCentral ? 8 : 5;
 
   const canvas = document.createElement("canvas");
   canvas.width = 1024;
@@ -184,33 +184,34 @@ function createNodeCard(node: any) {
   if (!context) return new THREE.Group();
 
   const isFinding = Number(node.vulnerabilities || 0) > 0;
-  const border = isFinding ? "rgba(239, 68, 68, 0.95)" : node.isCentral ? "rgba(0, 255, 65, 0.9)" : "rgba(75, 146, 255, 0.8)";
+  const fill = isFinding ? "rgba(35, 10, 15, 0.98)" : node.isCentral ? "rgba(0, 88, 28, 0.98)" : "rgba(14, 42, 96, 0.98)";
+  const border = isFinding ? "rgba(248, 113, 113, 0.98)" : node.isCentral ? "rgba(0, 255, 65, 0.95)" : "rgba(96, 165, 250, 0.95)";
 
-  roundRect(context, 22, 24, canvas.width - 44, canvas.height - 48, 42);
-  context.fillStyle = "rgba(0, 0, 0, 0)";
+  roundRect(context, 18, 20, canvas.width - 36, canvas.height - 40, 36);
+  context.fillStyle = fill;
   context.fill();
-  context.lineWidth = 10;
+  context.lineWidth = 12;
   context.strokeStyle = border;
   context.stroke();
 
-  context.fillStyle = isFinding ? "#fecaca" : "#e5e7eb";
-  context.font = "bold 42px Inter, sans-serif";
+  context.fillStyle = isFinding ? "#fecaca" : "#f8fbff";
+  context.font = node.isCentral ? "bold 40px Inter, sans-serif" : "bold 34px Inter, sans-serif";
   context.textBaseline = "top";
-  wrapText(context, String(node.name || "Untitled"), 64, 72, canvas.width - 128, 50, 2);
+  wrapText(context, String(node.name || "Untitled"), 64, 64, canvas.width - 128, 44, 2);
 
-  context.fillStyle = isFinding ? "#fca5a5" : "#9ca3af";
-  context.font = "28px Inter, sans-serif";
+  context.fillStyle = isFinding ? "#fecaca" : "#cfe1ff";
+  context.font = node.isCentral ? "28px Inter, sans-serif" : "24px Inter, sans-serif";
   const pathText = String(node.path || node.id || "");
-  wrapText(context, pathText, 64, 180, canvas.width - 128, 34, 2);
+  wrapText(context, pathText, 64, 160, canvas.width - 128, 30, 3);
 
   if (isFinding) {
     context.fillStyle = "#fecaca";
-    context.font = "bold 28px Inter, sans-serif";
-    context.fillText(`Findings: ${Number(node.vulnerabilities || 0)}`, 64, 316);
-  } else {
-    context.fillStyle = "#86efac";
     context.font = "bold 24px Inter, sans-serif";
-    context.fillText(String(node.language || "file").toUpperCase(), 64, 316);
+    context.fillText(`Findings: ${Number(node.vulnerabilities || 0)}`, 64, 292);
+  } else {
+    context.fillStyle = "#dbeafe";
+    context.font = "bold 22px Inter, sans-serif";
+    context.fillText(String(node.language || "file").toUpperCase(), 64, 292);
   }
 
   const texture = new THREE.CanvasTexture(canvas);
@@ -220,13 +221,13 @@ function createNodeCard(node: any) {
   const material = new THREE.MeshBasicMaterial({
     map: texture,
     transparent: true,
-    opacity: 0,
+    opacity: 1,
     depthWrite: false,
   });
   const geometry = new THREE.BoxGeometry(width, height, depth);
   const mesh = new THREE.Mesh(geometry, material);
 
-  const borderMaterial = new THREE.LineBasicMaterial({ color: border, transparent: true, opacity: 0.95 });
+  const borderMaterial = new THREE.LineBasicMaterial({ color: border, transparent: true, opacity: 1 });
   const borderMesh = new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.BoxGeometry(width + 0.8, height + 0.8, depth + 0.8)), borderMaterial);
 
   const group = new THREE.Group();

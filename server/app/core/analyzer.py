@@ -17,6 +17,7 @@ class CodeAnalyzer:
     MAX_FILES = 250
     MAX_FILE_BYTES = 200_000
     ALLOWED_EXTS = {"py", "js", "jsx", "ts", "tsx", "java", "go", "rs", "php", "rb", "cs", "cpp", "c", "h", "hpp"}
+    MANIFEST_NAMES = {"package.json", "pyproject.toml", "requirements.txt", "requirements-dev.txt", "dev-requirements.txt", "package-lock.json", "pnpm-lock.yaml", "yarn.lock"}
 
     def __init__(self):
         self.ingestion = IngestionEngine()
@@ -50,7 +51,9 @@ class CodeAnalyzer:
                         break
 
                     ext = file.rsplit(".", 1)[-1].lower()
-                    if ext in self.ALLOWED_EXTS:
+                    file_name_lower = file.lower()
+                    is_manifest = file_name_lower in self.MANIFEST_NAMES
+                    if ext in self.ALLOWED_EXTS or is_manifest:
                         file_path = os.path.join(root, file)
                         relative_path = os.path.relpath(file_path, repo_path)
 
@@ -69,11 +72,15 @@ class CodeAnalyzer:
                                 "jsx": "javascript",
                                 "ts": "typescript",
                                 "tsx": "typescript",
+                                "json": "json",
+                                "toml": "toml",
+                                "yaml": "yaml",
+                                "lock": "text",
                             }
 
                             all_files.append({
                                 "file_path": relative_path,
-                                "language": language_map.get(ext, ext),
+                                "language": language_map.get(ext, "text") if not is_manifest else language_map.get(ext, "text"),
                                 "content": content,
                                 "complexity": 0,
                                 "functions": [],
@@ -244,6 +251,8 @@ class CodeAnalyzer:
 
             if basename == "package.json":
                 manifest = self._parse_package_json(file_path, content)
+            elif basename in {"package-lock.json", "pnpm-lock.yaml", "yarn.lock"}:
+                manifest = self._parse_lockfile(file_path, basename, content)
             elif basename in {"requirements.txt", "requirements-dev.txt", "dev-requirements.txt"}:
                 manifest = self._parse_requirements_file(file_path, content)
             elif basename == "pyproject.toml":
@@ -327,6 +336,49 @@ class CodeAnalyzer:
             return {}
 
         return {"file_path": file_path, "type": "pyproject.toml", "dependencies": dependencies}
+
+    def _parse_lockfile(self, file_path: str, basename: str, content: str) -> Dict[str, Any]:
+        dependencies = []
+
+        if basename == "package-lock.json":
+            try:
+                parsed = json.loads(content)
+            except Exception:
+                return {}
+
+            packages = parsed.get("packages", {}) if isinstance(parsed, dict) else {}
+            if isinstance(packages, dict):
+                for pkg_path, meta in packages.items():
+                    if pkg_path in {"", "."}:
+                        continue
+                    if not isinstance(meta, dict):
+                        continue
+                    package_name = str(meta.get("name") or os.path.basename(pkg_path) or pkg_path)
+                    package_version = str(meta.get("version") or "")
+                    dependencies.append({"name": package_name, "version": package_version, "source": "package-lock.json"})
+
+        elif basename == "pnpm-lock.yaml":
+            for line in content.splitlines():
+                stripped = line.strip()
+                if "/" in stripped and stripped.endswith(":") and not stripped.startswith("#"):
+                    pkg = stripped.rstrip(":")
+                    pkg_name = pkg.split("/")[-1].split("@", 1)[0] if pkg else ""
+                    if pkg_name:
+                        dependencies.append({"name": pkg_name, "version": "", "source": "pnpm-lock.yaml"})
+
+        elif basename == "yarn.lock":
+            current = None
+            for line in content.splitlines():
+                if line and not line.startswith((" ", "\t", "#")) and line.endswith(":"):
+                    current = line.rstrip(":").split(",")[0].strip().strip('"')
+                    pkg_name = current.split("@", 1)[0]
+                    if pkg_name:
+                        dependencies.append({"name": pkg_name, "version": "", "source": "yarn.lock"})
+
+        if not dependencies:
+            return {}
+
+        return {"file_path": file_path, "type": basename, "dependencies": dependencies}
 
     def _split_dependency_string(self, value: str) -> tuple[str, str]:
         match = re.match(r"^([A-Za-z0-9_.-]+)\s*(.*)$", value.strip())
