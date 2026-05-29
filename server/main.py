@@ -38,7 +38,10 @@ app.add_middleware(
 
 @app.get("/health")
 async def health_check():
-    return {"status": "ok"}
+    return {
+        "status": "server on, redirect to dashboard",
+        "redirect": "/dashboard",
+    }
 
 # Initialize Core Services
 analyzer = CodeAnalyzer()
