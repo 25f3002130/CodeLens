@@ -117,6 +117,17 @@ class CodeAnalyzer:
                         if progress_callback:
                             progress_callback(f"✅ {msg}")
 
+                        vuln_map = {}
+                        for vuln in vulnerabilities:
+                            file_path = str(vuln.get("file_path", "")).strip()
+                            if not file_path:
+                                continue
+                            vuln_map.setdefault(file_path, []).append(vuln)
+
+                        for file_info in all_files:
+                            file_path = str(file_info.get("file_path", "")).strip()
+                            file_info["vulnerabilities"] = vuln_map.get(file_path, [])
+
                     # AI hotspots only
                     ai_hotspots = ai_results.get("hotspots", [])
                     if ai_hotspots and isinstance(ai_hotspots, list):

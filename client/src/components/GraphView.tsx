@@ -66,19 +66,19 @@ export default function GraphView({ data, onNodeClick }: { data: any; onNodeClic
     if (mounted && fgRef.current && enhancedGraphData && enhancedGraphData.nodes.length > 0) {
       // Position camera to look at the center of the graph (where central node is)
       fgRef.current.cameraPosition(
-        { x: 0, y: 0, z: 140 }, // pull back to show more of the graph by default
+        { x: 0, y: 0, z: 220 }, // pull back to show more of the graph by default
         { x: 0, y: 0, z: 0 },  // look at origin (where central node will be)
         1500  // smooth transition duration
       );
 
-      fgRef.current.d3Force?.("charge")?.strength(-1200);
+      fgRef.current.d3Force?.("charge")?.strength(-2400);
       fgRef.current.d3Force?.("collision")?.radius((node: any) => {
-        if (node.isCentral) return 24;
-        return Math.max(12, Math.min(22, 10 + String(node.name || "").length * 0.25));
+        if (node.isCentral) return 40;
+        return Math.max(18, Math.min(32, 16 + String(node.name || "").length * 0.35));
       });
       fgRef.current.d3Force?.("link")?.distance((link: any) => {
         const sourceIsCentral = link.source?.isCentral || link.target?.isCentral;
-        return sourceIsCentral ? 180 : 120;
+        return sourceIsCentral ? 280 : 180;
       });
     }
   }, [mounted, enhancedGraphData]);
@@ -100,7 +100,7 @@ export default function GraphView({ data, onNodeClick }: { data: any; onNodeClic
         }}
         nodeVal={(node: any) => node.val}
         nodeThreeObject={(node: any) => createNodeCard(node)}
-        nodeThreeObjectExtend={true}
+        nodeThreeObjectExtend={false}
         linkDirectionalArrowLength={4}
         linkDirectionalArrowRelPos={0.5}
         linkCurvature={0.15}
@@ -184,8 +184,8 @@ function createNodeCard(node: any) {
   if (!context) return new THREE.Group();
 
   const isFinding = Number(node.vulnerabilities || 0) > 0;
-  const fill = isFinding ? "rgba(35, 10, 15, 0.98)" : node.isCentral ? "rgba(0, 88, 28, 0.98)" : "rgba(14, 42, 96, 0.98)";
-  const border = isFinding ? "rgba(248, 113, 113, 0.98)" : node.isCentral ? "rgba(0, 255, 65, 0.95)" : "rgba(96, 165, 250, 0.95)";
+  const fill = isFinding ? "rgba(220, 38, 38, 0.98)" : node.isCentral ? "rgba(0, 88, 28, 0.98)" : "rgba(14, 42, 96, 0.98)";
+  const border = isFinding ? "rgba(255, 205, 205, 0.98)" : node.isCentral ? "rgba(0, 255, 65, 0.95)" : "rgba(96, 165, 250, 0.95)";
 
   roundRect(context, 18, 20, canvas.width - 36, canvas.height - 40, 36);
   context.fillStyle = fill;
@@ -194,18 +194,18 @@ function createNodeCard(node: any) {
   context.strokeStyle = border;
   context.stroke();
 
-  context.fillStyle = isFinding ? "#fecaca" : "#f8fbff";
+  context.fillStyle = isFinding ? "#fff7f7" : "#f8fbff";
   context.font = node.isCentral ? "bold 40px Inter, sans-serif" : "bold 34px Inter, sans-serif";
   context.textBaseline = "top";
   wrapText(context, String(node.name || "Untitled"), 64, 64, canvas.width - 128, 44, 2);
 
-  context.fillStyle = isFinding ? "#fecaca" : "#cfe1ff";
+  context.fillStyle = isFinding ? "#fff7f7" : "#cfe1ff";
   context.font = node.isCentral ? "28px Inter, sans-serif" : "24px Inter, sans-serif";
   const pathText = String(node.path || node.id || "");
   wrapText(context, pathText, 64, 160, canvas.width - 128, 30, 3);
 
   if (isFinding) {
-    context.fillStyle = "#fecaca";
+    context.fillStyle = "#fff7f7";
     context.font = "bold 24px Inter, sans-serif";
     context.fillText(`Findings: ${Number(node.vulnerabilities || 0)}`, 64, 292);
   } else {
