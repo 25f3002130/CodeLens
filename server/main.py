@@ -44,7 +44,7 @@ async def health_check():
 analyzer = CodeAnalyzer()
 
 
-def _safe_read_file(repo_path: str, relative_path: str, max_bytes: int = 12000) -> str:
+def _safe_read_file(repo_path: str, relative_path: str, max_bytes: int | None = 12000) -> str:
     if not repo_path or not relative_path:
         return ""
 
@@ -58,9 +58,29 @@ def _safe_read_file(repo_path: str, relative_path: str, max_bytes: int = 12000) 
 
     try:
         with open(full_path, "r", errors="ignore") as handle:
-            return handle.read(max_bytes)
+            return handle.read() if max_bytes is None else handle.read(max_bytes)
     except Exception:
         return ""
+
+
+def _resolve_repo_file(snapshot: dict, relative_path: str) -> tuple[str, str]:
+    repo_path = snapshot.get("repo_path", "")
+    if not repo_path or not relative_path:
+        return "", ""
+
+    normalized = os.path.normpath(relative_path).lstrip(os.sep)
+    full_path = os.path.normpath(os.path.join(repo_path, normalized))
+    repo_root = os.path.normpath(repo_path)
+    if not full_path.startswith(repo_root):
+        return "", ""
+
+    if not os.path.exists(full_path) or not os.path.isfile(full_path):
+        return "", ""
+
+    try:
+        return full_path, os.path.relpath(full_path, repo_path)
+    except Exception:
+        return "", ""
 
 
 def _build_graph_neighbors(snapshot: dict) -> dict:
@@ -104,6 +124,193 @@ def _resolve_file_candidates(snapshot: dict, query: str):
     return heuristic_matches
 
 
+def _query_terms(query: str) -> list[str]:
+    stop_words = {
+        "the",
+        "and",
+        "for",
+        "with",
+        "from",
+        "this",
+        "that",
+        "these",
+        "those",
+        "please",
+        "can",
+        "you",
+        "tell",
+        "about",
+        "show",
+        "read",
+        "all",
+        "file",
+        "files",
+        "project",
+        "repo",
+        "repository",
+        "my",
+        "different",
+        "please",
+        "need",
+        "want",
+        "access",
+        "look",
+        "see",
+    }
+    tokens = []
+    for raw in re.split(r"[^a-zA-Z0-9_.-]+", query.lower()):
+        token = raw.strip("._-")
+        if len(token) < 2 or token in stop_words:
+            continue
+        if token not in tokens:
+            tokens.append(token)
+    return tokens
+
+
+def _is_broad_query(query: str) -> bool:
+    lowered = query.lower()
+    broad_markers = ["all files", "related", "everything", "entire", "broad", "overview", "analyze", "read all", "scan", "chat", "conversation"]
+    return any(marker in lowered for marker in broad_markers)
+
+
+def _guess_language(file_path: str) -> str:
+    ext = os.path.splitext(file_path)[1].lower().lstrip(".")
+    language_map = {
+        "py": "python",
+        "js": "javascript",
+        "jsx": "javascript",
+        "ts": "typescript",
+        "tsx": "typescript",
+        "mjs": "javascript",
+        "cjs": "javascript",
+        "json": "json",
+        "md": "markdown",
+        "toml": "toml",
+        "yml": "yaml",
+        "yaml": "yaml",
+        "css": "css",
+        "html": "html",
+    }
+    return language_map.get(ext, ext or "text")
+
+
+def _collect_repo_file_paths(repo_path: str) -> list[str]:
+    allowed_exts = {
+        "py",
+        "js",
+        "jsx",
+        "ts",
+        "tsx",
+        "mjs",
+        "cjs",
+        "json",
+        "md",
+        "txt",
+        "toml",
+        "yml",
+        "yaml",
+        "css",
+        "html",
+        "env",
+    }
+    skip_dirs = {".git", "node_modules", "__pycache__", ".next", "dist", "build", "coverage", "venv", ".venv"}
+    collected = []
+
+    for root, dirs, files in os.walk(repo_path):
+        dirs[:] = [directory for directory in dirs if directory not in skip_dirs]
+        for file_name in files:
+            full_path = os.path.join(root, file_name)
+            try:
+                if os.path.getsize(full_path) > 200_000:
+                    continue
+            except Exception:
+                continue
+
+            ext = file_name.rsplit(".", 1)[-1].lower() if "." in file_name else ""
+            is_env_example = file_name.startswith(".env")
+            if ext in allowed_exts or file_name.lower() in {"readme", "readme.md", "license", "makefile"} or is_env_example:
+                collected.append(os.path.relpath(full_path, repo_path))
+
+    return collected
+
+
+def _score_file_for_query(file_info: dict, query_terms: list[str]) -> int:
+    file_path = str(file_info.get("file_path", "")).lower()
+    basename = os.path.basename(file_path)
+    dirname = os.path.dirname(file_path)
+    score = 0
+
+    for term in query_terms:
+        if term == basename:
+            score += 8
+        if term in basename:
+            score += 6
+        if term in file_path:
+            score += 4
+        if term in dirname:
+            score += 2
+
+    if basename in {"readme.md", "package.json", "requirements.txt", "pyproject.toml"}:
+        score += 1
+
+    return score
+
+
+def _select_context_files(snapshot: dict, query: str, max_files: int = 10) -> list[dict]:
+    files = list(snapshot.get("files", []))
+    repo_path = snapshot.get("repo_path", "")
+    if repo_path and os.path.isdir(repo_path):
+        existing_paths = {str(file_info.get("file_path", "")) for file_info in files}
+        for file_path in _collect_repo_file_paths(repo_path):
+            if file_path not in existing_paths:
+                files.append(
+                    {
+                        "file_path": file_path,
+                        "language": _guess_language(file_path),
+                        "imports": [],
+                        "complexity": 0,
+                        "functions": [],
+                        "classes": [],
+                        "vulnerabilities": 0,
+                    }
+                )
+
+    query_terms = _query_terms(query)
+    broad = _is_broad_query(query)
+
+    scored = []
+    for file_info in files:
+        score = _score_file_for_query(file_info, query_terms)
+        if score > 0:
+            scored.append((score, file_info))
+
+    if not scored and broad:
+        special_files = snapshot.get("special_files", []) or []
+        special_paths = {str(item.get("file_path", "")) for item in special_files}
+        for file_info in files:
+            if str(file_info.get("file_path", "")) in special_paths:
+                scored.append((1, file_info))
+
+    scored.sort(key=lambda item: (-item[0], str(item[1].get("file_path", ""))))
+    selected = []
+    seen = set()
+
+    limit = max_files if broad else min(max_files, 6)
+    for _, file_info in scored:
+        file_path = str(file_info.get("file_path", ""))
+        if not file_path or file_path in seen:
+            continue
+        seen.add(file_path)
+        selected.append(file_info)
+        if len(selected) >= limit:
+            break
+
+    if not selected:
+        selected = files[: min(limit, len(files))]
+
+    return selected
+
+
 def _is_general_query(query: str) -> bool:
     lowered = query.lower()
     general_markers = ["overview", "summary", "what does", "how does", "explain", "architecture", "repo", "project", "security", "dependency", "hotspot", "readme"]
@@ -115,51 +322,65 @@ def _build_file_context(snapshot: dict, targets: list[dict], query: str) -> tupl
     neighbors = _build_graph_neighbors(snapshot)
     files_by_path = {str(f.get("file_path", "")): f for f in snapshot.get("files", [])}
 
-    if len(targets) > 1:
-        choices = "\n".join([f"- {f.get('file_path')}" for f in targets[:8]])
-        return (
-            f"I found multiple files matching your request. Please specify the exact file path:\n{choices}",
-            []
+    broad = _is_broad_query(query)
+    max_files = 12 if broad else 6
+    selected_targets = targets[:max_files]
+
+    context_paths = []
+    sections = []
+    if len(selected_targets) > 1:
+        sections.append(
+            f"Matched {len(selected_targets)} files for this request. Reading the strongest matches and their nearby context instead of forcing a single file path."
         )
 
-    target = targets[0]
-    target_path = str(target.get("file_path", ""))
-    context_files = [target_path]
+    total_chars = 0
+    max_total_chars = 32000 if broad else 18000
 
-    related_paths = []
-    for path in sorted(neighbors.get(target_path, set())):
-        if path in files_by_path and path != target_path:
-            related_paths.append(path)
+    for target in selected_targets:
+        target_path = str(target.get("file_path", ""))
+        if not target_path or target_path in context_paths:
+            continue
 
-    same_dir = os.path.dirname(target_path)
-    for f in snapshot.get("files", []):
-        path = str(f.get("file_path", ""))
-        if path != target_path and os.path.dirname(path) == same_dir:
-            related_paths.append(path)
+        context_paths.append(target_path)
+        sections.append(f"\nFile: {target_path}")
+        target_content = _safe_read_file(repo_path, target_path)
+        if target_content:
+            clipped = target_content[:6000]
+            sections.append(clipped)
+            total_chars += len(clipped)
 
-    if target_path.lower().endswith("readme.md"):
-        related_paths = related_paths[:3]
+        related_paths = []
+        for path in sorted(neighbors.get(target_path, set())):
+            if path in files_by_path and path != target_path:
+                related_paths.append(path)
 
-    unique_related = []
-    seen = set(context_files)
-    for path in related_paths:
-        if path not in seen:
-            seen.add(path)
-            unique_related.append(path)
+        same_dir = os.path.dirname(target_path)
+        for f in snapshot.get("files", []):
+            path = str(f.get("file_path", ""))
+            if path != target_path and os.path.dirname(path) == same_dir:
+                related_paths.append(path)
 
-    sections = [f"Target file: {target_path}"]
-    target_content = _safe_read_file(repo_path, target_path)
-    if target_content:
-        sections.append(f"\nFile content of {target_path}:\n{target_content}")
+        unique_related = []
+        seen = set(context_paths)
+        for path in related_paths:
+            if path not in seen:
+                seen.add(path)
+                unique_related.append(path)
 
-    if unique_related:
-        sections.append("\nDirectly related files:")
-    for path in unique_related[:5]:
-        related_content = _safe_read_file(repo_path, path)
-        if related_content:
-            sections.append(f"\nFile content of {path}:\n{related_content}")
+        for path in unique_related[:2]:
+            if path in context_paths or total_chars >= max_total_chars:
+                continue
+            related_content = _safe_read_file(repo_path, path)
+            if related_content:
+                clipped = related_content[:4000]
+                context_paths.append(path)
+                sections.append(f"\nRelated file: {path}\n{clipped}")
+                total_chars += len(clipped)
 
-    return "\n".join(sections), [target_path, *unique_related[:5]]
+        if total_chars >= max_total_chars:
+            break
+
+    return "\n".join(sections), context_paths
 
 
 def _build_general_context(snapshot: dict) -> str:
@@ -254,17 +475,20 @@ class ChatRequest(BaseModel):
     repo_id: str
     query: str
 
+
+class RepoFileRequest(BaseModel):
+    repo_id: str
+    file_path: str
+
 @app.post("/chat")
 async def chat(request: ChatRequest, user: dict = Depends(verify_token)):
     snapshot = analyzer.ingestion.load_snapshot(request.repo_id)
     if not snapshot:
         return {"answer": "I could not find a stored repo snapshot for that repository yet. Run an analysis first, then ask again."}
 
-    matched_files = _resolve_file_candidates(snapshot, request.query)
-    if matched_files and not _is_general_query(request.query):
+    matched_files = _select_context_files(snapshot, request.query)
+    if matched_files:
         context_str, matched_paths = _build_file_context(snapshot, matched_files, request.query)
-        if "Please specify the exact file path" in context_str:
-            return {"answer": context_str}
     else:
         context_str = _build_general_context(snapshot)
         matched_paths = []
@@ -279,8 +503,10 @@ async def chat(request: ChatRequest, user: dict = Depends(verify_token)):
     prompt = f"""
     You are CodeLens AI. Answer the user's question about the following codebase context.
     Use the provided repo structure, linked files, hotspots, dependencies, security findings, and direct file contents to be specific.
-    If the query references a file and the file is provided below, prioritize that file and its directly related neighbors.
+    If multiple files are provided, synthesize across them instead of asking the user to choose one.
+    If the query references an area like chat, UI, auth, or data flow, review the strongest matching files and summarize how they work together.
     If the query is general, summarize the repository from the provided context.
+    Cite file paths when useful, and mention when you could not inspect a file directly.
 
     Context:
     {context_str}
@@ -309,6 +535,29 @@ async def chat(request: ChatRequest, user: dict = Depends(verify_token)):
         last_error = "openai package is not installed."
 
     return {"answer": f"Error: All NIM API attempts failed. Last error: {last_error}"}
+
+
+@app.post("/repo/file")
+async def repo_file(request: RepoFileRequest, user: dict = Depends(verify_token)):
+    snapshot = analyzer.ingestion.load_snapshot(request.repo_id)
+    if not snapshot:
+        return {"error": "Repository snapshot not found."}
+
+    full_path, resolved_path = _resolve_repo_file(snapshot, request.file_path)
+    if not full_path:
+        return {"error": "File not found in repository."}
+
+    content = _safe_read_file(snapshot.get("repo_path", ""), resolved_path, max_bytes=None)
+    if content == "":
+        return {"error": "File could not be read."}
+
+    return {
+        "repo_id": request.repo_id,
+        "file_path": resolved_path,
+        "content": content,
+        "language": _guess_language(resolved_path),
+        "size": len(content),
+    }
 
 if __name__ == "__main__":
     import uvicorn

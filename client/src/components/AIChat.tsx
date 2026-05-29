@@ -188,7 +188,7 @@ export default function AIChat({ repoId, user, className }: { repoId: string, us
     };
 
     return (
-        <div id="chat-container" className={`panel h-full flex flex-col bg-[#050505] border-[#222] relative overflow-hidden ${className ?? ""}`}>
+        <div id="chat-container" className={`panel h-full min-h-0 flex flex-col bg-[#050505] border-[#222] relative overflow-hidden ${className ?? ""}`}>
             <div className="absolute inset-0 w-full h-full overflow-hidden pointer-events-none">
                 <div className="absolute top-0 left-1/4 w-64 h-64 bg-[#00ff41]/5 rounded-full mix-blend-normal filter blur-[100px] animate-pulse" />
                 <div className="absolute bottom-0 right-1/4 w-64 h-64 bg-[#00ff41]/5 rounded-full mix-blend-normal filter blur-[100px] animate-pulse delay-700" />
@@ -201,7 +201,7 @@ export default function AIChat({ repoId, user, className }: { repoId: string, us
                 <span className="text-[10px] text-[#00ff41] bg-[#003b11] px-2 py-0.5 rounded border border-[#00ff41]/30 shadow-[0_0_10px_rgba(0,255,65,0.2)]">Repo Context</span>
             </div>
 
-            <div className="flex-1 overflow-y-auto p-4 space-y-4 font-mono text-[11px] relative z-10 scrollbar-thin scrollbar-thumb-[#222] scrollbar-track-transparent">
+            <div className="flex-1 min-h-0 overflow-y-auto p-4 space-y-4 font-mono text-[11px] relative z-10 scrollbar-thin scrollbar-thumb-[#222] scrollbar-track-transparent">
                 {messages.length === 0 && (
                     <motion.div 
                         initial={{ opacity: 0, y: 10 }}
@@ -229,13 +229,13 @@ export default function AIChat({ repoId, user, className }: { repoId: string, us
                                 <Bot size={12} />
                             </div>
                         )}
-                        <div className={`max-w-[85%] p-3 rounded-2xl ${
+                        <div className={`max-w-[85%] min-w-0 break-words p-3 rounded-2xl ${
                             msg.role === "user" 
                             ? "bg-[#00ff41]/10 text-[#00ff41] border border-[#00ff41]/20 rounded-tr-sm shadow-[0_0_15px_rgba(0,255,65,0.05)]" 
                             : "bg-[#111]/80 backdrop-blur-sm text-[#ddd] border border-[#222] rounded-tl-sm shadow-xl"
                         }`}>
                             {msg.role === "assistant" ? (
-                                <div className="prose prose-invert prose-sm max-w-none prose-p:leading-relaxed prose-pre:bg-[#050505] prose-pre:border prose-pre:border-[#333] prose-pre:p-3 prose-code:text-[#00ff41] prose-a:text-[#00ff41]">
+                                <div className="prose prose-invert prose-sm max-w-none prose-p:leading-relaxed prose-pre:bg-[#050505] prose-pre:border prose-pre:border-[#333] prose-pre:p-3 prose-pre:overflow-x-auto prose-code:text-[#00ff41] prose-a:text-[#00ff41]">
                                     <ReactMarkdown remarkPlugins={[remarkGfm]}>
                                         {msg.content}
                                     </ReactMarkdown>

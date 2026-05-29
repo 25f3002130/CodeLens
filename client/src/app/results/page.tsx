@@ -13,10 +13,14 @@ import {
   ShieldAlert,
   LogOut,
   ArrowLeft,
+  X,
+  FileCode,
 } from "lucide-react";
 import GraphView from "@/components/GraphView";
 import AIChat from "@/components/AIChat";
 import { useAuth } from "@/hooks/useAuth";
+
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8000";
 
 type Vulnerability = {
   id: string;
@@ -45,6 +49,10 @@ export default function ResultsPage() {
   const [displayedHotspots, setDisplayedHotspots] = useState(5);
   const [displayedFindings, setDisplayedFindings] = useState(5);
   const [displayedDependencies, setDisplayedDependencies] = useState(8);
+  const [previewOpen, setPreviewOpen] = useState(false);
+  const [previewLoading, setPreviewLoading] = useState(false);
+  const [previewError, setPreviewError] = useState("");
+  const [previewFile, setPreviewFile] = useState<{ path: string; language: string; content: string } | null>(null);
 
   useEffect(() => {
     const resultsStr = sessionStorage.getItem("analysisResults");
@@ -167,6 +175,43 @@ export default function ResultsPage() {
     sessionStorage.removeItem("analysisResults");
     sessionStorage.removeItem("repoUrl");
     router.push("/dashboard");
+  };
+
+  const handleGraphNodeClick = async (node: any) => {
+    const filePath = String(node?.path || node?.id || "");
+    if (!filePath || node?.isCentral) return;
+
+    try {
+      setPreviewOpen(true);
+      setPreviewLoading(true);
+      setPreviewError("");
+      setPreviewFile(null);
+
+      const token = await user.getIdToken();
+      const response = await fetch(`${API_BASE_URL}/repo/file`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${token}`,
+        },
+        body: JSON.stringify({ repo_id: results.repo_id, file_path: filePath }),
+      });
+
+      const data = await response.json();
+      if (!response.ok || data.error) {
+        throw new Error(data.error || "Could not load file contents.");
+      }
+
+      setPreviewFile({
+        path: data.file_path || filePath,
+        language: data.language || String(node?.language || "text"),
+        content: data.content || "",
+      });
+    } catch (error: any) {
+      setPreviewError(error?.message || "Could not load file contents.");
+    } finally {
+      setPreviewLoading(false);
+    }
   };
 
   const files: AnalyzedFile[] = results?.files || [];
@@ -293,7 +338,7 @@ export default function ResultsPage() {
         </div>
 
         {/* Center - Graph & Chat */}
-        <div className="flex flex-col gap-4 h-full min-w-0">
+        <div className="flex flex-col gap-4 h-full min-w-0 min-h-0">
           {/* Graph */}
           <div className="bg-[#0a0a0a] border border-[#222] rounded-xl overflow-hidden shadow-lg shrink-0">
             <div className="bg-[#111] border-b border-[#222] px-5 py-3.5">
@@ -301,19 +346,19 @@ export default function ResultsPage() {
                 <GitBranch size={15} className="text-[#00ff41]" /> Dependency Graph
               </h3>
             </div>
-            <div className="h-[350px] bg-[#0a0a0a]">
-              <GraphView data={results.graph} />
+            <div className="h-[460px] bg-[#0a0a0a]">
+              <GraphView data={results.graph} onNodeClick={handleGraphNodeClick} />
             </div>
           </div>
 
           {/* AI Chat */}
-          <div className="bg-[#0a0a0a] border border-[#222] rounded-xl overflow-hidden shadow-lg flex-1 flex flex-col min-h-[400px]">
+          <div className="bg-[#0a0a0a] border border-[#222] rounded-xl overflow-hidden shadow-lg flex-1 flex flex-col min-h-0">
             <div className="bg-[#111] border-b border-[#222] px-5 py-3.5 shrink-0">
               <h3 className="text-sm font-bold text-[#888] uppercase tracking-widest flex items-center gap-2.5">
                 <Code2 size={15} className="text-[#00ff41]" /> AI Assistant
               </h3>
             </div>
-            <div className="flex-1 overflow-hidden">
+            <div className="flex-1 min-h-0 overflow-hidden">
               <AIChat repoId={results.repo_id} user={user} className="h-full" />
             </div>
           </div>
@@ -468,6 +513,56 @@ export default function ResultsPage() {
           </div>
         </div>
       </div>
+
+      {previewOpen && (
+        <div className="fixed inset-0 z-[60] bg-black/75 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="w-full max-w-5xl h-[80vh] bg-[#0a0a0a] border border-[#222] rounded-2xl shadow-2xl overflow-hidden flex flex-col">
+            <div className="px-4 py-3 border-b border-[#222] flex items-center justify-between bg-[#111]">
+              <div className="min-w-0">
+                <div className="flex items-center gap-2 text-[#00ff41] text-sm font-bold">
+                  <FileCode size={14} /> File Preview
+                </div>
+                <p className="text-[11px] text-[#888] font-mono truncate">
+                  {previewFile?.path || "Loading file..."}
+                </p>
+              </div>
+              <button
+                onClick={() => setPreviewOpen(false)}
+                className="w-9 h-9 rounded-lg border border-[#222] bg-[#0a0a0a] text-[#888] hover:text-white hover:border-[#00ff41]/50 transition-all flex items-center justify-center"
+                aria-label="Close file preview"
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            <div className="flex-1 min-h-0 overflow-hidden">
+              {previewLoading ? (
+                <div className="h-full flex items-center justify-center text-[#00ff41] gap-3">
+                  <Loader2 className="animate-spin" size={20} />
+                  Loading file contents...
+                </div>
+              ) : previewError ? (
+                <div className="h-full flex items-center justify-center p-6 text-center text-red-400">
+                  <div>
+                    <p className="font-bold mb-2">Could not open file</p>
+                    <p className="text-sm text-red-300/80">{previewError}</p>
+                  </div>
+                </div>
+              ) : (
+                <div className="h-full flex flex-col">
+                  <div className="px-4 py-2 border-b border-[#222] text-[11px] text-[#666] font-mono bg-[#050505] flex items-center justify-between gap-3">
+                    <span>{previewFile?.language || "text"}</span>
+                    <span>{previewFile?.content?.length || 0} chars</span>
+                  </div>
+                  <pre className="flex-1 min-h-0 overflow-auto p-4 text-[12px] leading-6 font-mono text-[#e5e5e5] whitespace-pre break-words bg-[#050505]">
+                    <code>{previewFile?.content || "No file contents available."}</code>
+                  </pre>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </main>
   );
 }
