@@ -85,7 +85,7 @@ export default function LandingPage({ onGetStarted }: { onGetStarted: () => Prom
         <div className="max-w-7xl mx-auto">
           <div className="text-center mb-20">
             <h2 className="text-4xl md:text-5xl font-outfit font-bold mb-4">Engineered for <span className="text-[#00ff41]">Scale.</span></h2>
-            <p className="text-[#888] max-w-xl mx-auto">Deep architectural insights powered by cutting-edge RAG and graph theory.</p>
+            <p className="text-[#888] max-w-xl mx-auto">Deep architectural insights powered by AI-driven graph analysis.</p>
           </div>
 
           <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
@@ -97,7 +97,7 @@ export default function LandingPage({ onGetStarted }: { onGetStarted: () => Prom
             <FeatureCard
               icon={<Cpu className="text-[#00ff41]" />}
               title="AI Code Oracle"
-              desc="Ask deep architectural questions. Our RAG pipeline understands your logic better than documentation."
+              desc="Ask deep architectural questions. Our repo-aware AI understands your logic better than documentation."
             />
             <FeatureCard
               icon={<ShieldCheck className="text-[#00ff41]" />}
@@ -137,7 +137,7 @@ export default function LandingPage({ onGetStarted }: { onGetStarted: () => Prom
                 <div className="text-[#00ff41]">[SYSTEM] Initializing Ingestion Engine...</div>
                 <div className="text-[#888]">[FETCH] Cloning repository...</div>
                 <div className="text-[#888]">[PARSE] Analyzing AST structures...</div>
-                <div className="text-[#888]">[INDEX] Building vector embeddings...</div>
+                <div className="text-[#888]">[INDEX] Building compact repo snapshot...</div>
                 <div className="text-[#00ff41]">[OK] Analysis Complete.</div>
                 <div className="text-white mt-4 animate-pulse">{">"} READY FOR INTERROGATION_</div>
               </div>

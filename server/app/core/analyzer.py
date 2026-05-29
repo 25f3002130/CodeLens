@@ -1,7 +1,10 @@
 import os
+import re
+import json
 from typing import List, Dict, Any
 from .ingestion import IngestionEngine
 from .ai_analyzer import AIAnalyzer
+from .graph import GraphBuilder
 import hashlib
 
 class CodeAnalyzer:
@@ -53,6 +56,8 @@ class CodeAnalyzer:
                             with open(file_path, "r", errors="ignore") as f:
                                 content = f.read()
 
+                            imports = self._extract_imports(content, ext)
+
                             language_map = {
                                 "py": "python",
                                 "js": "javascript",
@@ -68,17 +73,19 @@ class CodeAnalyzer:
                                 "complexity": 0,
                                 "functions": [],
                                 "classes": [],
+                                "imports": imports,
                                 "vulnerabilities": [],
                             })
                         except Exception as e:
                             print(f"Error parsing {file_path}: {e}")
 
-            graph_data = {"nodes": [], "links": []}
             vulnerabilities = []
             hotspots = []
 
+            graph_data = {"nodes": [], "links": []}
             ai_tech_stack = {}
             ai_deps_data = {}
+            repo_context_files = self._collect_repo_context_files(all_files)
 
             # Use AI Analysis to enhance findings if available
             if self.ai_analyzer:
@@ -109,6 +116,11 @@ class CodeAnalyzer:
                     ai_tech_stack = ai_results.get("tech_stack", {})
                     ai_deps_data = ai_results.get("dependencies", {})
 
+                    if not isinstance(ai_deps_data, dict):
+                        ai_deps_data = self._normalize_dependency_payload(ai_deps_data)
+
+                    graph_data = GraphBuilder(repo_path, all_files).build_graph()
+
                 except Exception as e:
                     print(f"AI analysis failed, continuing with basic analysis: {e}")
 
@@ -119,6 +131,31 @@ class CodeAnalyzer:
 
             dependency_manifests = []
             dependency_count = 0
+
+            snapshot = {
+                "repo_id": repo_id,
+                "repo_url": repo_url,
+                "repo_path": repo_path,
+                "files": [
+                    {
+                        "file_path": f.get("file_path"),
+                        "language": f.get("language"),
+                        "imports": f.get("imports", []),
+                        "complexity": f.get("complexity", 0),
+                        "functions": f.get("functions", []),
+                        "classes": f.get("classes", []),
+                        "vulnerabilities": len(f.get("vulnerabilities", [])),
+                    }
+                    for f in all_files
+                ],
+                "special_files": repo_context_files,
+                "graph": graph_data,
+                "hotspots": hotspots,
+                "vulnerabilities": vulnerabilities,
+                "tech_stack": ai_tech_stack,
+                "ai_dependencies": ai_deps_data,
+            }
+            self.ingestion.save_snapshot(repo_id, snapshot)
 
             return {
                 "repo_id": repo_id,
@@ -144,7 +181,147 @@ class CodeAnalyzer:
             }
         finally:
             if repo_path:
-                self.ingestion.cleanup(repo_path)
+                # Keep the cloned repo for chat queries; cleanups can be scheduled separately.
+                pass
+
+    def _safe_int(self, value: Any, default: int = 0) -> int:
+        try:
+            return int(value)
+        except Exception:
+            try:
+                import re
+                match = re.search(r"(\d+)", str(value))
+                if match:
+                    return int(match.group(1))
+            except Exception:
+                pass
+        return default
+
+    def _extract_imports(self, content: str, ext: str) -> List[str]:
+        imports = []
+        if ext == "py":
+            for match in re.finditer(r"^\s*(?:from\s+([\w\.]+)\s+import|import\s+([\w\.]+))", content, re.MULTILINE):
+                imports.extend([group for group in match.groups() if group])
+        elif ext in {"js", "jsx", "ts", "tsx"}:
+            patterns = [
+                r"import\s+.*?from\s+['\"]([^'\"]+)['\"]",
+                r"require\(\s*['\"]([^'\"]+)['\"]\s*\)",
+            ]
+            for pattern in patterns:
+                imports.extend(re.findall(pattern, content))
+        return list(dict.fromkeys(imports))
+
+    def _collect_repo_context_files(self, files: List[Dict]) -> List[Dict[str, Any]]:
+        context_files = []
+        priority_names = {"README.md", "README", "package.json", "pyproject.toml", "requirements.txt", "package-lock.json", "pnpm-lock.yaml", "yarn.lock"}
+
+        for file in files:
+            file_path = str(file.get("file_path", ""))
+            basename = os.path.basename(file_path)
+            if basename not in priority_names:
+                continue
+
+            content = str(file.get("content", ""))
+            context_files.append({
+                "file_path": file_path,
+                "language": file.get("language", "text"),
+                "content": content[:4000],
+            })
+
+        return context_files
+
+    def _normalize_dependency_payload(self, dependencies: Any) -> Dict[str, List[Dict]]:
+        """Normalize loose dependency payloads into the shape expected by the frontend."""
+        normalized = {"vulnerable": [], "outdated": []}
+
+        if isinstance(dependencies, list):
+            for item in dependencies:
+                if isinstance(item, dict) and item.get("name"):
+                    normalized["vulnerable"].append(item)
+            return normalized
+
+        if not isinstance(dependencies, dict):
+            return normalized
+
+        for key in ("vulnerable", "vulnerabilities", "security", "security_risks"):
+            items = dependencies.get(key, [])
+            if isinstance(items, list):
+                for item in items:
+                    if isinstance(item, dict) and item.get("name"):
+                        normalized["vulnerable"].append(item)
+
+        for key in ("outdated", "updates", "outdated_packages"):
+            items = dependencies.get(key, [])
+            if isinstance(items, list):
+                for item in items:
+                    if isinstance(item, dict) and item.get("name"):
+                        normalized["outdated"].append(item)
+
+        if isinstance(dependencies.get("vulnerable"), list):
+            normalized["vulnerable"] = dependencies.get("vulnerable", [])
+        if isinstance(dependencies.get("outdated"), list):
+            normalized["outdated"] = dependencies.get("outdated", [])
+
+        return normalized
+
+    def _build_graph_data(self, files: List[Dict], vulnerabilities: List[Dict], hotspots: List[Dict]) -> Dict[str, Any]:
+        """Build a lightweight file graph for the 3D visualization."""
+        vuln_map = {}
+        hotspot_set = set()
+
+        for vuln in vulnerabilities:
+            path = str(vuln.get("file_path", ""))
+            vuln_map[path] = vuln_map.get(path, 0) + 1
+
+        for hotspot in hotspots:
+            path = str(hotspot.get("file_path", ""))
+            if path:
+                hotspot_set.add(path)
+
+        nodes = []
+        links = []
+        seen_dirs = set()
+
+        for file in files[:200]:
+            file_path = str(file.get("file_path", ""))
+            if not file_path:
+                continue
+
+            language = str(file.get("language", "unknown"))
+            complexity = self._safe_int(file.get("complexity", 0), 0)
+            vuln_count = vuln_map.get(file_path, 0)
+            is_hotspot = file_path in hotspot_set
+            parts = file_path.split("/")
+            parent = "/".join(parts[:-1]) if len(parts) > 1 else ""
+            node_id = file_path
+
+            nodes.append({
+                "id": node_id,
+                "name": parts[-1],
+                "path": file_path,
+                "language": language,
+                "complexity": complexity,
+                "vulnerabilities": vuln_count,
+                "val": max(2, min(18, 2 + complexity + vuln_count * 3 + (3 if is_hotspot else 0))),
+            })
+
+            if parent:
+                parent_id = parent
+                if parent_id not in seen_dirs:
+                    seen_dirs.add(parent_id)
+                    nodes.append({
+                        "id": parent_id,
+                        "name": parts[-2],
+                        "path": parent_id,
+                        "language": "folder",
+                        "complexity": 0,
+                        "vulnerabilities": 0,
+                        "val": 3,
+                        "isFolder": True,
+                    })
+                links.append({"source": parent_id, "target": node_id})
+
+        return {"nodes": nodes, "links": links}
 
     def _count_languages(self, files: List[Dict]) -> Dict[str, int]:
         counts = {}

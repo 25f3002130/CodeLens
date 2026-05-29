@@ -198,7 +198,7 @@ export default function AIChat({ repoId, user, className }: { repoId: string, us
                 <h3 className="text-xs font-bold text-[#444] uppercase tracking-widest flex items-center gap-2">
                     <Sparkles size={14} className="text-[#00ff41]" /> Code Intelligence Chat
                 </h3>
-                <span className="text-[10px] text-[#00ff41] bg-[#003b11] px-2 py-0.5 rounded border border-[#00ff41]/30 shadow-[0_0_10px_rgba(0,255,65,0.2)]">RAG Enabled</span>
+                <span className="text-[10px] text-[#00ff41] bg-[#003b11] px-2 py-0.5 rounded border border-[#00ff41]/30 shadow-[0_0_10px_rgba(0,255,65,0.2)]">Repo Context</span>
             </div>
 
             <div className="flex-1 overflow-y-auto p-4 space-y-4 font-mono text-[11px] relative z-10 scrollbar-thin scrollbar-thumb-[#222] scrollbar-track-transparent">

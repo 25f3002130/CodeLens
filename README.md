@@ -128,7 +128,7 @@ Includes:
 | Backend | FastAPI, Python |
 | Authentication | Firebase Authentication |
 | AI Engine | Google Gemini Pro |
-| Database | ChromaDB |
+| Database | Optional: ChromaDB (disabled by default) |
 | Visualization | Three.js, React Force Graph 3D |
 | Parsing | Tree-sitter |
 | Deployment | Vercel / Docker (planned) |
@@ -336,5 +336,14 @@ Contributions, suggestions, and feedback are welcome.
 # Author
 
 Built by Aditya Raj
+
+Note: This project moved from a RAG/vector-index-first approach to a repo-snapshot approach by default. Instead of storing vector embeddings for the entire repository, CodeLens now builds a compact snapshot during analysis containing:
+
+- file tree and metadata (paths, languages, imports)
+- compact excerpts of key files (README, manifests)
+- hotspots and security findings
+- generated dependency lists and tech-stack summaries
+
+This snapshot is persisted alongside the cloned repo (in the `server` temp cache) and used by the chat endpoint to resolve file-specific queries deterministically and cheaply. ChromaDB and vector embeddings are now optional and disabled by default to reduce memory/CPU usage on constrained hosts.
 
 ```
