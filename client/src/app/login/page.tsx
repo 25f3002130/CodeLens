@@ -39,19 +39,21 @@ export default function LoginPage() {
             </p>
           </div>
 
-          <button
-            onClick={loginWithGoogle}
-            className="px-8 py-3 bg-[#00ff41] text-black rounded-lg font-bold text-lg hover:bg-[#00ff41]/90 transition-all shadow-lg hover:shadow-xl"
-          >
-            Login with Google
-          </button>
+          <div className="flex flex-col items-center gap-3">
+            <button
+              onClick={loginWithGoogle}
+              className="px-8 py-3 bg-[#00ff41] text-black rounded-lg font-bold text-lg hover:bg-[#00ff41]/90 transition-all shadow-lg hover:shadow-xl"
+            >
+              Login with Google
+            </button>
 
-          <button
-            onClick={() => router.push("/documentation")}
-            className="px-6 py-2.5 bg-transparent text-[#00ff41] border border-[#00ff41]/70 rounded-md font-semibold text-sm hover:bg-[#00ff41]/10 hover:border-[#00ff41] transition-all inline-flex items-center gap-2 mx-auto"
-          >
-            <BookOpen size={16} /> Documentation
-          </button>
+            <button
+              onClick={() => router.push("/documentation")}
+              className="px-6 py-2.5 bg-transparent text-[#00ff41] border border-[#00ff41]/70 rounded-md font-semibold text-sm hover:bg-[#00ff41]/10 hover:border-[#00ff41] transition-all inline-flex items-center gap-2"
+            >
+              <BookOpen size={16} /> Documentation
+            </button>
+          </div>
 
           <p className="text-[#666] text-sm">
             Analyze any public GitHub repository with AI-powered insights
